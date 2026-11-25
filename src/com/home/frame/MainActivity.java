@@ -103,6 +103,9 @@ public class MainActivity extends Activity {
     private Subway.Alert lastAlert;
     private int subwayTicks;
     private LinearLayout tiles, side;
+    private View leftCol, rightCol, captionBox;
+    private NightSky nightSky;
+    private Boolean night;   // null until the first check
     private volatile boolean photoLoading;
     private boolean showingTop, hasPhoto;
 
@@ -274,7 +277,7 @@ public class MainActivity extends Activity {
     private void readConfig(Intent i) {
         if (i == null || i.getExtras() == null) return;
         SharedPreferences.Editor e = prefs.edit();
-        for (String k : new String[]{"xboxLiveId", "xboxIp", "subwayStops", "calendars", "sonos"}) {
+        for (String k : new String[]{"xboxLiveId", "xboxIp", "subwayStops", "calendars", "sonos", "night"}) {
             String v = i.getStringExtra(k);
             if (v != null) e.putString(k, v.trim());
         }
@@ -343,6 +346,11 @@ public class MainActivity extends Activity {
             iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
             root.addView(iv, new FrameLayout.LayoutParams(-1, -1));
         }
+        // Bedtime sky: sits over the photos (under the scrims and text), faded in after sunset.
+        nightSky = new NightSky(this);
+        nightSky.setAlpha(0f);
+        nightSky.setVisibility(View.GONE);
+        root.addView(nightSky, new FrameLayout.LayoutParams(-1, -1));
 
         // Scrims so text stays legible on any photo.
         View top = new View(this);
@@ -392,6 +400,7 @@ public class MainActivity extends Activity {
         FrameLayout.LayoutParams tlp = new FrameLayout.LayoutParams(colW, -2, Gravity.TOP | Gravity.START);
         tlp.setMargins(pad, topM, 0, 0);
         root.addView(left, tlp);
+        leftCol = left;
 
         // Right column: weather header, then the subway sign.
         LinearLayout tr = new LinearLayout(this);
@@ -429,6 +438,7 @@ public class MainActivity extends Activity {
         FrameLayout.LayoutParams trp = new FrameLayout.LayoutParams(colW, -2, Gravity.TOP | Gravity.END);
         trp.setMargins(0, topM, pad, 0);
         root.addView(tr, trp);
+        rightCol = tr;
 
         // Bottom-right: photo caption (place + credit only), kept quiet.
         LinearLayout bl = new LinearLayout(this);
@@ -448,6 +458,7 @@ public class MainActivity extends Activity {
         FrameLayout.LayoutParams blp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END);
         blp.setMargins(0, 0, pad, bottomM);
         root.addView(bl, blp);
+        captionBox = bl;
 
         // Bottom-left: tiles. Four big app tiles, then Apps / Settings stacked to the same height.
         tiles = new LinearLayout(this);
@@ -823,9 +834,44 @@ public class MainActivity extends Activity {
             clock.setText(new SimpleDateFormat("h:mm", Locale.US).format(now));
             dateDay.setText(new SimpleDateFormat("EEEE", Locale.US).format(now).toUpperCase(Locale.US));
             date.setText(new SimpleDateFormat("MMM d", Locale.US).format(now).toUpperCase(Locale.US));
+            updateNight();
             ui.postDelayed(this, CLOCK_MS);
         }
     };
+
+    // ---------- night mode (sunset to sunrise) ----------
+
+    /** "night" pref: auto (default, follows the sun), on, or off. */
+    private void updateNight() {
+        String mode = prefs.getString("night", "auto");
+        boolean want = mode.equals("on") || (!mode.equals("off") && Night.isNight(System.currentTimeMillis(), LAT, LON));
+        if (night != null && night == want) {
+            if (want) nightSky.start();   // keep the sky animating after returning from another app
+            return;
+        }
+        boolean first = night == null;
+        night = want;
+        long ms = first ? 0 : 4000;
+        WindowManager.LayoutParams wl = getWindow().getAttributes();
+        if (want) {
+            nightSky.setVisibility(View.VISIBLE);
+            nightSky.start();
+            nightSky.animate().alpha(1f).setDuration(ms).start();
+            for (View v : new View[]{leftCol, rightCol}) v.animate().alpha(0.7f).setDuration(ms).start();
+            tiles.animate().alpha(0.6f).setDuration(ms).start();
+            captionBox.animate().alpha(0f).setDuration(ms).start();   // no photo credit over the sky
+            wl.screenBrightness = 0.3f;
+        } else {
+            nightSky.animate().alpha(0f).setDuration(ms).withEndAction(() -> {
+                nightSky.stop();
+                nightSky.setVisibility(View.GONE);
+            }).start();
+            for (View v : new View[]{leftCol, rightCol, tiles, captionBox}) v.animate().alpha(1f).setDuration(ms).start();
+            wl.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+            if (!first) nextPhoto();   // morning: a fresh photo instead of last night's
+        }
+        getWindow().setAttributes(wl);
+    }
 
     // ---------- network helpers ----------
 
@@ -1045,7 +1091,7 @@ public class MainActivity extends Activity {
     }
 
     private void nextPhoto() {
-        if (photoLoading) return;
+        if (photoLoading || Boolean.TRUE.equals(night)) return;   // the sky replaces photos at night
         photoLoading = true;
         io.execute(() -> {
             try {
