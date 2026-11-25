@@ -18,7 +18,7 @@ final class Agenda {
     static final class Event {
         String title, calendar;
         long begin, end;
-        boolean allDay;
+        boolean allDay, past;
         int color;
     }
 
@@ -30,6 +30,10 @@ final class Agenda {
         if (only != null) for (String n : only.split(",")) if (!n.trim().isEmpty()) names.add(n.trim().toLowerCase(Locale.US));
 
         long now = System.currentTimeMillis();
+        java.util.Calendar midnight = java.util.Calendar.getInstance();
+        midnight.set(java.util.Calendar.HOUR_OF_DAY, 0); midnight.set(java.util.Calendar.MINUTE, 0);
+        midnight.set(java.util.Calendar.SECOND, 0); midnight.set(java.util.Calendar.MILLISECOND, 0);
+        long dayStart = midnight.getTimeInMillis();
         Uri.Builder b = CalendarContract.Instances.CONTENT_URI.buildUpon();
         ContentUris.appendId(b, now - 86_400_000L);       // include all-day events that started "today" in UTC
         ContentUris.appendId(b, now + days * 86_400_000L);
@@ -45,7 +49,7 @@ final class Agenda {
         List<Event> out = new ArrayList<>();
         try (Cursor c = cr.query(b.build(), proj, null, null, CalendarContract.Instances.BEGIN + " ASC")) {
             if (c == null) return out;
-            while (c.moveToNext() && out.size() < max) {
+            while (c.moveToNext() && out.size() < 40) {
                 Event e = new Event();
                 e.title = c.getString(0);
                 e.begin = c.getLong(1);
@@ -61,7 +65,9 @@ final class Agenda {
                     e.begin -= tz.getOffset(e.begin);
                     e.end -= tz.getOffset(e.end);
                 }
-                if (e.end <= now) continue;
+                // Keep everything from today, even what's already over (shown dimmed); drop earlier days.
+                if (e.end <= dayStart) continue;
+                e.past = e.end <= now;
                 if (e.title == null || e.title.trim().isEmpty()) e.title = "(busy)";
                 // The same event often lives on two calendars (sometimes with a shortened title): show it once.
                 boolean dup = false;
@@ -75,6 +81,9 @@ final class Agenda {
                 out.add(e);
             }
         }
+        // Too many to fit: give up finished events first (oldest first), then trim the far future.
+        while (out.size() > max && out.get(0).past) out.remove(0);
+        while (out.size() > max) out.remove(out.size() - 1);
         return out;
     }
 

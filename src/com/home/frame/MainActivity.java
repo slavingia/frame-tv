@@ -801,6 +801,7 @@ public class MainActivity extends Activity {
             tl.leftMargin = dp(8);
             tl.gravity = Gravity.CENTER_VERTICAL;
             row.addView(title, tl);
+            if (e.past) row.setAlpha(0.45f);   // already over today: still listed, but quiet
             LinearLayout.LayoutParams rl = new LinearLayout.LayoutParams(-1, -2);
             rl.topMargin = dp(6);
             agenda.addView(row, rl);
