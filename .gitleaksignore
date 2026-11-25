@@ -1,0 +1,7 @@
+# Reviewed findings only. Each line is one exact gitleaks fingerprint (commit:file:rule:line).
+# 58c9b0e: made-up documentation IPs in the first commit (example LAN addresses), not real
+# addresses; replaced with 192.168.1.x placeholders in the next commit.
+58c9b0e5a57c83d6cd5ba7d4e4ff823df0105c24:device.example.ps1:private-ipv4:2
+58c9b0e5a57c83d6cd5ba7d4e4ff823df0105c24:README.md:private-ipv4:43
+58c9b0e5a57c83d6cd5ba7d4e4ff823df0105c24:README.md:private-ipv4:46
+58c9b0e5a57c83d6cd5ba7d4e4ff823df0105c24:deploy.ps1:private-ipv4:2
