@@ -1,0 +1,6 @@
+build/
+*.apk
+*.apk.idsig
+*.keystore
+*.jks
+device.local.ps1
