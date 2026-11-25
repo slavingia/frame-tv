@@ -1,0 +1,46 @@
+#!/bin/sh
+# Blocks commits that would publish secrets or personal info.
+# Enable once per clone:  git config core.hooksPath .githooks
+fail=0
+root=$(git rev-parse --show-toplevel)
+
+# 1. Local-only files must never be committed.
+if git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)(device\.local\.ps1|\.pii-denylist|.*\.keystore|.*\.jks)$' >/dev/null; then
+  echo "pre-commit: refusing to commit a local-only file (device.local.ps1, .pii-denylist, keystores)." >&2
+  fail=1
+fi
+
+# 2. Commit identity must be a GitHub noreply address.
+email=$(git config user.email)
+case "$email" in
+  *@users.noreply.github.com) ;;
+  *) echo "pre-commit: author email '$email' is not a GitHub noreply address." >&2
+     echo "  git config user.email <id>+<username>@users.noreply.github.com" >&2
+     fail=1 ;;
+esac
+
+# 3. gitleaks: default secret rules + the PII rules in .gitleaks.toml.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --staged --redact --no-banner --config "$root/.gitleaks.toml" "$root" || fail=1
+else
+  echo "pre-commit: gitleaks is not installed (winget install Gitleaks.Gitleaks / brew install gitleaks)." >&2
+  fail=1
+fi
+
+# 4. Personal denylist: one term per line in the untracked .pii-denylist (case-insensitive).
+if [ -f "$root/.pii-denylist" ]; then
+  terms=$(mktemp)
+  grep -v '^[[:space:]]*#' "$root/.pii-denylist" | sed '/^[[:space:]]*$/d; s/[[:space:]]*$//' > "$terms"
+  if [ -s "$terms" ]; then
+    hits=$(git diff --cached -U0 --no-color | grep '^+' | grep -v '^+++' | grep -iF -f "$terms")
+    if [ -n "$hits" ]; then
+      echo "pre-commit: staged lines match terms in .pii-denylist:" >&2
+      echo "$hits" | cut -c1-120 >&2
+      fail=1
+    fi
+  fi
+  rm -f "$terms"
+fi
+
+[ $fail -eq 0 ] || echo "pre-commit: commit blocked. Fix the above (or, if it is truly safe, commit with --no-verify)." >&2
+exit $fail

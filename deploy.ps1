@@ -1,5 +1,5 @@
 # Installs frame.apk on a TV over adb, then pushes your settings from device.local.ps1 (not committed).
-#   .\deploy.ps1 -Device 192.168.1.50
+#   .\deploy.ps1 -Device 192.168.1.x
 param([string]$Device, [string]$Adb = 'adb')
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot

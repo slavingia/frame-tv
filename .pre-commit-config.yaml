@@ -1,0 +1,16 @@
+# For people who use the pre-commit framework (pip install pre-commit && pre-commit install).
+# Without it, `git config core.hooksPath .githooks` runs the same checks.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        args: ["--config", ".gitleaks.toml"]
+  - repo: local
+    hooks:
+      - id: pii-guard
+        name: PII guard (noreply author, local-only files, .pii-denylist)
+        entry: sh .githooks/pre-commit
+        language: system
+        pass_filenames: false
+        always_run: true

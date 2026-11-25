@@ -40,14 +40,46 @@ All personal settings live on the device (SharedPreferences), set via intent ext
 | key           | example                                 |
 |---------------|-----------------------------------------|
 | `subwayStops` | `A27\|42 St\|A,C,E;R20\|14 St\|N,Q,R`   |
-| `sonos`       | `192.168.1.20,192.168.1.21`             |
+| `sonos`       | `192.168.1.x,192.168.1.y`               |
 | `calendars`   | `Family,Work`                           |
 | `xboxLiveId`  | `FD00XXXXXXXXXXXX`                      |
-| `xboxIp`      | `192.168.1.30`                          |
+| `xboxIp`      | `192.168.1.z`                           |
 
 ```powershell
 adb shell am start -n com.home.frame/.MainActivity --es subwayStops "A27|42 St|A,C,E"
 ```
+
+## Keeping personal info out
+
+This repo is public, so nothing about your home (addresses, nearby stations, LAN IPs, device IDs, emails) belongs in it. Several layers check for that:
+
+**Where personal settings live.** Only on the TV (SharedPreferences) and in your untracked `device.local.ps1`, which `deploy.ps1` pushes to the device. Code defaults stay empty, and docs use placeholders like `192.168.1.x` and `FD00XXXXXXXXXXXX`.
+
+**Pre-commit hook.** Enable it once per clone:
+
+```powershell
+winget install Gitleaks.Gitleaks      # or: brew install gitleaks
+git config core.hooksPath .githooks
+git config user.email "<id>+<username>@users.noreply.github.com"
+```
+
+`.githooks/pre-commit` blocks a commit when:
+- gitleaks finds a secret (its default rules) or PII. The custom rules in `.gitleaks.toml` cover private LAN IPs, email addresses other than noreply ones, MAC addresses, Xbox Live IDs, precise lat/lon pairs, and US phone numbers.
+- your commit email isn't a GitHub `@users.noreply.github.com` address.
+- a local-only file is staged (`device.local.ps1`, `.pii-denylist`, keystores).
+- a staged line contains any term from your `.pii-denylist`.
+
+**Personal denylist.** `.pii-denylist` is gitignored and holds one term per line (case-insensitive; `#` starts a comment). Use it for things only you know are personal: your street and nearby stations, your real name and email, your LAN subnet (e.g. `192.168.0.`), your device MAC prefixes.
+
+If you use the [pre-commit](https://pre-commit.com) framework instead, `pre-commit install` runs the same checks via `.pre-commit-config.yaml`.
+
+**CI.** `.github/workflows/pii-scan.yml` runs gitleaks over the full history on every push and pull request. It also fails if any commit author or committer email isn't a noreply address. That catches commits made with `--no-verify` or from a clone without the hook.
+
+**If something leaks anyway.** Assume it's already public: forks, caches and scrapers see a push within minutes.
+1. Revoke or rotate anything that works as a credential (tokens, keys, passwords).
+2. Remove it from the whole history, not just the latest commit (`git filter-repo --replace-text`, or BFG), then force-push.
+3. Ask GitHub Support to purge cached views if it was sensitive.
+4. Add the term to `.pii-denylist` (or a rule to `.gitleaks.toml`) so it can't come back.
 
 ## License
 

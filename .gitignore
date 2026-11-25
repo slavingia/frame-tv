@@ -4,3 +4,4 @@ build/
 *.keystore
 *.jks
 device.local.ps1
+.pii-denylist
